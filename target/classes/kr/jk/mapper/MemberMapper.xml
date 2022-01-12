@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.jk.mapper.MemberMapper">
+
+	<!-- C -->
+	<!-- 회원가입 -->
+	<insert id="registMember">
+		insert into tbl_member (memberid, pw, membername, phone)
+		values (#{memberId}, #{pw}, #{memberName}, #{phone})
+	</insert>
+	
+	<!-- 권한 부여 -->
+	<insert id="giveAuth">
+		insert into tbl_auth (memberid, authname)
+		values (#{memberId}, 'ROLE_MEMBER')
+	</insert>
+	
+
+	<!-- R -->
+	<!-- tbl_member와 tbl_auth를 조인 처리하는 ResultMap -->
+	<!-- tbl_member 부분 -->
+	<resultMap id="memberMap" type="kr.jk.domain.MemberVO">
+		<id property="memberId" column="memberid" />
+		<!-- Result, Collection을 통해 바깥쪽 객체(MemberVO의 인스턴스)와 안쪽 객체(AuthVO의 인스턴스) 구성 -->
+		<result property="memberId" column="memberid" />
+		<result property="pw" column="pw" />
+		<result property="memberName" column="membername" />
+		<result property="phone" column="phone" />
+		<!--<result property="enabled" column="enabled" />-->
+		<result property="joinDate" column="joindate" />
+		<collection property="authList" resultMap="authMap">
+		</collection>		
+	</resultMap>
+	<!-- tbl_auth 부분 -->
+	<resultMap id="authMap" type="kr.jk.domain.AuthVO">
+		<result property="memberId" column="memberid"/>
+		<result property="authName" column="authname"/>
+	</resultMap>
+
+	<!-- 회원정보와 회원권한 조회 -->
+	<select id="read" resultMap="memberMap">
+		SELECT
+		mem.memberid, mem.pw, mem.membername, mem.phone, mem.enabled, mem.joindate, auth.authname
+		FROM
+		tbl_member mem LEFT OUTER JOIN tbl_auth auth
+		ON mem.memberid = auth.memberid
+		WHERE mem.memberid = #{memberid} 
+	</select>
+
+	<!-- 회원 정보 목록 조회 -->
+	<select id="getMemberList" resultType="kr.jk.domain.MemberVO">
+		select memberid, membername, phone, joindate, enabled from tbl_member
+	</select>
+	<!-- MyBatis를 이용한 페이징 처리 -->
+	<!--기존 <trim>태그를 <sql>태그로 처리하여 분리-->
+	<sql id="criteria">
+		<trim prefix="(" suffix=") AND " prefixOverrides="OR">
+			<foreach item='type' collection="typeArr">
+				<trim prefix="OR">
+					<choose>
+						<when test="type == 'I'.toString()">
+							memberid like '%'||#{keyword}||'%'
+						</when>
+						<when test="type == 'N'.toString()">
+							membername like '%'||#{keyword}||'%'
+						</when>
+						<when test="type == 'P'.toString()">
+							phone like '%'||#{keyword}||'%'
+						</when>
+					</choose>
+				</trim>
+			</foreach>
+		</trim>
+	</sql>
+	<select id="getMemberListWithPaging" resultType="kr.jk.domain.MemberVO">
+		<!-- ![CDATA]는 부등호를 이용한 sql문 처리를 위해 사용 -->
+		<!-- INDEX를 이용하면 sql처리 속도가 order by보다 빠름 -->
+		<![CDATA[ 
+			select
+			memberid, membername, phone, joindate, enabled
+			from (
+				select /*+ INDEX_DESC(tbl_member pk_member) */
+				rownum as rn, memberid, membername, phone, joindate, enabled
+				from
+				tbl_member
+				where
+		]]>
+		
+		<!-- <sql>태그로 처리하여 분리된 sql을 include 태그를 사용하여 삽입 -->
+		<include refid="criteria"></include>
+		
+		<![CDATA[ 
+			rownum <= #{pageNum} * #{amount}
+			)
+			where rn > (#{pageNum} -1) * #{amount}
+		]]>	
+	</select>
+	
+	<!-- 페이징 처리를 위한 전체 회원수 전달 -->
+	<select id="getTotalMemberCount" resultType="int">
+		select count(*) from tbl_member
+	</select>
+	
+	
+	<!-- U -->
+	<!-- 회원 정보 수정(아이디, 이름 수정x) -->
+	<update id="updateProfile">
+		update tbl_member
+		set pw = #{pw},
+		phone = #{phone}
+		where memberid = #{memberId}
+	</update>
+	
+	
+	<!-- D -->
+	<!-- 회원 탈퇴 -->
+	<delete id="resign">
+		delete from tbl_member where memberid = #{memberId}
+	</delete>	
+	
+	<delete id="deleteAuth">
+		delete from tbl_auth where memberid = #{memberId}
+	</delete>
+
+</mapper>
